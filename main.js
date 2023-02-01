@@ -1277,6 +1277,57 @@ module.exports = function (V, P) {
 
 /***/ }),
 
+/***/ 647:
+/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+
+var uncurryThis = __webpack_require__(1702);
+var toObject = __webpack_require__(7908);
+
+var floor = Math.floor;
+var charAt = uncurryThis(''.charAt);
+var replace = uncurryThis(''.replace);
+var stringSlice = uncurryThis(''.slice);
+var SUBSTITUTION_SYMBOLS = /\$([$&'`]|\d{1,2}|<[^>]*>)/g;
+var SUBSTITUTION_SYMBOLS_NO_NAMED = /\$([$&'`]|\d{1,2})/g;
+
+// `GetSubstitution` abstract operation
+// https://tc39.es/ecma262/#sec-getsubstitution
+module.exports = function (matched, str, position, captures, namedCaptures, replacement) {
+  var tailPos = position + matched.length;
+  var m = captures.length;
+  var symbols = SUBSTITUTION_SYMBOLS_NO_NAMED;
+  if (namedCaptures !== undefined) {
+    namedCaptures = toObject(namedCaptures);
+    symbols = SUBSTITUTION_SYMBOLS;
+  }
+  return replace(replacement, symbols, function (match, ch) {
+    var capture;
+    switch (charAt(ch, 0)) {
+      case '$': return '$';
+      case '&': return matched;
+      case '`': return stringSlice(str, 0, position);
+      case "'": return stringSlice(str, tailPos);
+      case '<':
+        capture = namedCaptures[stringSlice(ch, 1, -1)];
+        break;
+      default: // \d\d?
+        var n = +ch;
+        if (n === 0) return match;
+        if (n > m) {
+          var f = floor(n / 10);
+          if (f === 0) return match;
+          if (f <= m) return captures[f - 1] === undefined ? charAt(ch, 1) : captures[f - 1] + charAt(ch, 1);
+          return match;
+        }
+        capture = captures[n - 1];
+    }
+    return capture === undefined ? '' : capture;
+  });
+};
+
+
+/***/ }),
+
 /***/ 7854:
 /***/ ((module, __unused_webpack_exports, __webpack_require__) => {
 
@@ -3901,6 +3952,151 @@ fixRegExpWellKnownSymbolLogic('match', function (MATCH, nativeMatch, maybeCallNa
 
 /***/ }),
 
+/***/ 5306:
+/***/ ((__unused_webpack_module, __unused_webpack_exports, __webpack_require__) => {
+
+"use strict";
+
+var apply = __webpack_require__(2104);
+var call = __webpack_require__(6916);
+var uncurryThis = __webpack_require__(1702);
+var fixRegExpWellKnownSymbolLogic = __webpack_require__(7007);
+var fails = __webpack_require__(7293);
+var anObject = __webpack_require__(9670);
+var isCallable = __webpack_require__(614);
+var isNullOrUndefined = __webpack_require__(8554);
+var toIntegerOrInfinity = __webpack_require__(9303);
+var toLength = __webpack_require__(7466);
+var toString = __webpack_require__(1340);
+var requireObjectCoercible = __webpack_require__(4488);
+var advanceStringIndex = __webpack_require__(1530);
+var getMethod = __webpack_require__(8173);
+var getSubstitution = __webpack_require__(647);
+var regExpExec = __webpack_require__(7651);
+var wellKnownSymbol = __webpack_require__(5112);
+
+var REPLACE = wellKnownSymbol('replace');
+var max = Math.max;
+var min = Math.min;
+var concat = uncurryThis([].concat);
+var push = uncurryThis([].push);
+var stringIndexOf = uncurryThis(''.indexOf);
+var stringSlice = uncurryThis(''.slice);
+
+var maybeToString = function (it) {
+  return it === undefined ? it : String(it);
+};
+
+// IE <= 11 replaces $0 with the whole match, as if it was $&
+// https://stackoverflow.com/questions/6024666/getting-ie-to-replace-a-regex-with-the-literal-string-0
+var REPLACE_KEEPS_$0 = (function () {
+  // eslint-disable-next-line regexp/prefer-escape-replacement-dollar-char -- required for testing
+  return 'a'.replace(/./, '$0') === '$0';
+})();
+
+// Safari <= 13.0.3(?) substitutes nth capture where n>m with an empty string
+var REGEXP_REPLACE_SUBSTITUTES_UNDEFINED_CAPTURE = (function () {
+  if (/./[REPLACE]) {
+    return /./[REPLACE]('a', '$0') === '';
+  }
+  return false;
+})();
+
+var REPLACE_SUPPORTS_NAMED_GROUPS = !fails(function () {
+  var re = /./;
+  re.exec = function () {
+    var result = [];
+    result.groups = { a: '7' };
+    return result;
+  };
+  // eslint-disable-next-line regexp/no-useless-dollar-replacements -- false positive
+  return ''.replace(re, '$<a>') !== '7';
+});
+
+// @@replace logic
+fixRegExpWellKnownSymbolLogic('replace', function (_, nativeReplace, maybeCallNative) {
+  var UNSAFE_SUBSTITUTE = REGEXP_REPLACE_SUBSTITUTES_UNDEFINED_CAPTURE ? '$' : '$0';
+
+  return [
+    // `String.prototype.replace` method
+    // https://tc39.es/ecma262/#sec-string.prototype.replace
+    function replace(searchValue, replaceValue) {
+      var O = requireObjectCoercible(this);
+      var replacer = isNullOrUndefined(searchValue) ? undefined : getMethod(searchValue, REPLACE);
+      return replacer
+        ? call(replacer, searchValue, O, replaceValue)
+        : call(nativeReplace, toString(O), searchValue, replaceValue);
+    },
+    // `RegExp.prototype[@@replace]` method
+    // https://tc39.es/ecma262/#sec-regexp.prototype-@@replace
+    function (string, replaceValue) {
+      var rx = anObject(this);
+      var S = toString(string);
+
+      if (
+        typeof replaceValue == 'string' &&
+        stringIndexOf(replaceValue, UNSAFE_SUBSTITUTE) === -1 &&
+        stringIndexOf(replaceValue, '$<') === -1
+      ) {
+        var res = maybeCallNative(nativeReplace, rx, S, replaceValue);
+        if (res.done) return res.value;
+      }
+
+      var functionalReplace = isCallable(replaceValue);
+      if (!functionalReplace) replaceValue = toString(replaceValue);
+
+      var global = rx.global;
+      if (global) {
+        var fullUnicode = rx.unicode;
+        rx.lastIndex = 0;
+      }
+      var results = [];
+      while (true) {
+        var result = regExpExec(rx, S);
+        if (result === null) break;
+
+        push(results, result);
+        if (!global) break;
+
+        var matchStr = toString(result[0]);
+        if (matchStr === '') rx.lastIndex = advanceStringIndex(S, toLength(rx.lastIndex), fullUnicode);
+      }
+
+      var accumulatedResult = '';
+      var nextSourcePosition = 0;
+      for (var i = 0; i < results.length; i++) {
+        result = results[i];
+
+        var matched = toString(result[0]);
+        var position = max(min(toIntegerOrInfinity(result.index), S.length), 0);
+        var captures = [];
+        // NOTE: This is equivalent to
+        //   captures = result.slice(1).map(maybeToString)
+        // but for some reason `nativeSlice.call(result, 1, result.length)` (called in
+        // the slice polyfill when slicing native arrays) "doesn't work" in safari 9 and
+        // causes a crash (https://pastebin.com/N21QzeQA) when trying to debug it.
+        for (var j = 1; j < result.length; j++) push(captures, maybeToString(result[j]));
+        var namedCaptures = result.groups;
+        if (functionalReplace) {
+          var replacerArgs = concat([matched], captures, position, S);
+          if (namedCaptures !== undefined) push(replacerArgs, namedCaptures);
+          var replacement = toString(apply(replaceValue, undefined, replacerArgs));
+        } else {
+          replacement = getSubstitution(matched, S, position, captures, namedCaptures, replaceValue);
+        }
+        if (position >= nextSourcePosition) {
+          accumulatedResult += stringSlice(S, nextSourcePosition, position) + replacement;
+          nextSourcePosition = position + matched.length;
+        }
+      }
+      return accumulatedResult + stringSlice(S, nextSourcePosition);
+    }
+  ];
+}, !REPLACE_SUPPORTS_NAMED_GROUPS || !REPLACE_KEEPS_$0 || REGEXP_REPLACE_SUBSTITUTES_UNDEFINED_CAPTURE);
+
+
+/***/ }),
+
 /***/ 4032:
 /***/ ((__unused_webpack_module, __unused_webpack_exports, __webpack_require__) => {
 
@@ -4520,33 +4716,81 @@ var es_array_iterator = __webpack_require__(6992);
 var es_string_iterator = __webpack_require__(8783);
 // EXTERNAL MODULE: ./node_modules/core-js/modules/web.dom-collections.iterator.js
 var web_dom_collections_iterator = __webpack_require__(3948);
+// EXTERNAL MODULE: ./node_modules/core-js/modules/es.regexp.exec.js
+var es_regexp_exec = __webpack_require__(4916);
+// EXTERNAL MODULE: ./node_modules/core-js/modules/es.string.replace.js
+var es_string_replace = __webpack_require__(5306);
 // EXTERNAL MODULE: ./node_modules/core-js/modules/es.array.from.js
 var es_array_from = __webpack_require__(1038);
 // EXTERNAL MODULE: ./node_modules/core-js/modules/es.array.map.js
 var es_array_map = __webpack_require__(1249);
-// EXTERNAL MODULE: ./node_modules/core-js/modules/es.regexp.exec.js
-var es_regexp_exec = __webpack_require__(4916);
 // EXTERNAL MODULE: ./node_modules/core-js/modules/es.string.match.js
 var es_string_match = __webpack_require__(4723);
+;// CONCATENATED MODULE: ./src/js/luhnAlgorithmValidation.js
+function luhnAlgorithmValidation(value) {
+  var sum = 0;
+  if (value.length % 2 === 0) {
+    for (var i = 0; i < value.length; i += 2) {
+      if (value[i] * 2 > 9) {
+        sum += value[i] * 2 - 9;
+      } else {
+        sum += value[i] * 2;
+      }
+      sum += value[i + 1];
+    }
+    if (sum % 10 === 0) {
+      return true;
+    }
+    return false;
+  }
+  for (var _i = 1; _i < value.length; _i += 2) {
+    if (value[_i] * 2 > 9) {
+      sum += value[_i] * 2 - 9;
+    } else {
+      sum += value[_i] * 2;
+    }
+    sum += value[_i - 1];
+  }
+  sum += value[value.length - 1];
+  if (sum % 10 === 0) {
+    return true;
+  }
+  return false;
+}
 ;// CONCATENATED MODULE: ./src/js/validator.js
 
 
 
 
 
+
 /* eslint-disable max-len */
-function getCardType(value, isSubmit) {
+
+function getCardType(str, isSubmit) {
+  var value = str.replace(/ /g, '');
   var arrValue = Array.from(value);
   arrValue = arrValue.map(function (e) {
     return +e;
   });
   var response;
+  var isLuhnValid;
+  if (isSubmit) {
+    isLuhnValid = luhnAlgorithmValidation(arrValue);
+  }
   if (arrValue[0] === 2) {
     if (arrValue.length === 16 && isSubmit) {
-      response = {
-        success: true,
-        type: 'mir'
-      };
+      if (!isLuhnValid) {
+        response = {
+          success: false,
+          type: 'mir',
+          message: 'Ошибка: Проверьте корректность данных'
+        };
+      } else {
+        response = {
+          success: true,
+          type: 'mir'
+        };
+      }
     } else if (arrValue.length !== 16 && isSubmit) {
       response = {
         success: false,
@@ -4558,10 +4802,18 @@ function getCardType(value, isSubmit) {
     }
   } else if (arrValue[0] === 4) {
     if (arrValue.length === 16 && isSubmit) {
-      response = {
-        success: true,
-        type: 'visa'
-      };
+      if (!isLuhnValid) {
+        response = {
+          success: false,
+          type: 'visa',
+          message: 'Ошибка: Проверьте корректность данных'
+        };
+      } else {
+        response = {
+          success: true,
+          type: 'visa'
+        };
+      }
     } else if (arrValue.length !== 16 && isSubmit) {
       response = {
         success: false,
@@ -4574,10 +4826,18 @@ function getCardType(value, isSubmit) {
   } else if (arrValue[0] === 3) {
     if (arrValue[1] === 7 || arrValue[1] === 4) {
       if (arrValue.length === 15 && isSubmit) {
-        response = {
-          success: true,
-          type: 'amex'
-        };
+        if (!isLuhnValid) {
+          response = {
+            success: false,
+            type: 'amex',
+            message: 'Ошибка: Проверьте корректность данных'
+          };
+        } else {
+          response = {
+            success: true,
+            type: 'amex'
+          };
+        }
       } else if (arrValue.length !== 15 && isSubmit) {
         response = {
           success: false,
@@ -4589,10 +4849,18 @@ function getCardType(value, isSubmit) {
       }
     } else if (arrValue[1] === 0 && arrValue[2] >= 8 || arrValue[1] === 1 || arrValue[1] === 3 || arrValue[1] === 5) {
       if (arrValue.length === 15 && isSubmit) {
-        response = {
-          success: true,
-          type: 'jcb'
-        };
+        if (!isLuhnValid) {
+          response = {
+            success: false,
+            type: 'jcb',
+            message: 'Ошибка: Проверьте корректность данных'
+          };
+        } else {
+          response = {
+            success: true,
+            type: 'jcb'
+          };
+        }
       } else if (arrValue.length !== 16 && isSubmit) {
         response = {
           success: false,
@@ -4604,10 +4872,18 @@ function getCardType(value, isSubmit) {
       }
     } else if (arrValue[1] === 0 || arrValue[1] === 6 || arrValue[1] === 8) {
       if (arrValue.length === 15 && isSubmit) {
-        response = {
-          success: true,
-          type: 'diners_club'
-        };
+        if (!isLuhnValid) {
+          response = {
+            success: false,
+            type: 'diners_club',
+            message: 'Ошибка: Проверьте корректность данных'
+          };
+        } else {
+          response = {
+            success: true,
+            type: 'diners_club'
+          };
+        }
       } else if (arrValue.length !== 14 && isSubmit) {
         response = {
           success: false,
@@ -4620,10 +4896,18 @@ function getCardType(value, isSubmit) {
     }
   } else if (arrValue[0] === 5) {
     if (arrValue.length === 16 && isSubmit) {
-      response = {
-        success: true,
-        type: 'master'
-      };
+      if (!isLuhnValid) {
+        response = {
+          success: false,
+          type: 'master',
+          message: 'Ошибка: Проверьте корректность данных'
+        };
+      } else {
+        response = {
+          success: true,
+          type: 'master'
+        };
+      }
     } else if (arrValue.length !== 16 && isSubmit) {
       response = {
         success: false,
@@ -4635,10 +4919,18 @@ function getCardType(value, isSubmit) {
     }
   } else if (value.match(/^6011/)) {
     if (arrValue.length === 16 && isSubmit) {
-      response = {
-        success: true,
-        type: 'discover'
-      };
+      if (!isLuhnValid) {
+        response = {
+          success: false,
+          type: 'discover',
+          message: 'Ошибка: Проверьте корректность данных'
+        };
+      } else {
+        response = {
+          success: true,
+          type: 'discover'
+        };
+      }
     } else if (arrValue.length !== 16 && isSubmit) {
       response = {
         success: false,
