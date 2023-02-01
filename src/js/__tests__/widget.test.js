@@ -64,7 +64,7 @@ test('should valid class add', () => {
   expect(widget.input.classList.contains('form-control_valid')).toEqual(true);
 });
 
-test('should valid class add', () => {
+test('should unvalid class add', () => {
   document.body.innerHTML = containerMarkup;
 
   const container = document.querySelector('.widget-container');
@@ -76,4 +76,21 @@ test('should valid class add', () => {
   widget.submit.click();
 
   expect(widget.input.classList.contains('form-control_unvalid')).toEqual(true);
+});
+
+// luhn check
+
+test('should unvalid class add and tooltip', () => {
+  document.body.innerHTML = containerMarkup;
+
+  const container = document.querySelector('.widget-container');
+
+  const widget = new InnFormWidget(container);
+  widget.bindToDOM();
+
+  widget.input.value = '4024007111746515';
+  widget.submit.click();
+
+  expect(widget.input.classList.contains('form-control_unvalid')).toEqual(true);
+  expect(widget.tooltipInner.textContent).toEqual('Ошибка: Проверьте корректность данных');
 });

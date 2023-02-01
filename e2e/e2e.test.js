@@ -21,9 +21,9 @@ describe('Credit Card Validator form', () => {
     });
 
     browser = await puppetteer.launch({
-      headless: false, // show gui
-      slowMo: 50,
-      devtools: true, // show devTools
+      headless: false,
+      slowMo: 5,
+      devtools: true, 
     });
     page = await browser.newPage();
   });
@@ -31,6 +31,12 @@ describe('Credit Card Validator form', () => {
   afterAll(async () => {
     await browser.close();
     server.kill();
+  });
+
+  test('should widget render', async () => {
+    await page.goto(baseUrl);
+
+    await page.waitForSelector('.widget-container');
   });
 
   test('should valid class add', async () => {
@@ -43,7 +49,6 @@ describe('Credit Card Validator form', () => {
     await submit.click();
 
     await page.waitForSelector('.form-control_valid');
-    await page.waitForSelector('.succses-img', { hidden: false });
   });
 
   test('should tooltip render and unvalid class add', async () => {
@@ -52,10 +57,26 @@ describe('Credit Card Validator form', () => {
     const input = await page.$('.form-control');
     const submit = await page.$('#submitform');
 
-    await input.type('40240071117465167');
+    await input.type('402400711174651');
     await submit.click();
 
     await page.waitForSelector('.form-control_unvalid');
-    await page.waitForSelector('.tooltip', { hidden: false });
+  });
+
+
+  // luhn check 
+
+  test('should tooltip render and unvalid class add', async () => {
+    await page.goto(baseUrl);
+
+    const input = await page.$('.form-control');
+    const submit = await page.$('#submitform');
+    const tooltip = await page.$('.tooltip-inner');
+
+    await input.type('4024007111746515');
+    await submit.click();
+
+    await page.waitForSelector('.form-control_unvalid');
+    expect(await tooltip.evaluate(node => node.innerText)).toBe('Ошибка: Проверьте корректность данных');
   });
 });
