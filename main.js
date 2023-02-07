@@ -4777,169 +4777,76 @@ function getCardType(str, isSubmit) {
   if (isSubmit) {
     isLuhnValid = luhnAlgorithmValidation(arrValue);
   }
+  var cardData = {
+    mir: {
+      type: 'mir',
+      length: 16
+    },
+    visa: {
+      type: 'visa',
+      length: 16
+    },
+    amex: {
+      type: 'amex',
+      length: 15
+    },
+    jcb: {
+      type: 'jcb',
+      length: 15
+    },
+    diners_club: {
+      type: 'diners_club',
+      length: 14
+    },
+    master: {
+      type: 'master',
+      length: 16
+    },
+    discover: {
+      type: 'discover',
+      length: 16
+    }
+  };
+  var getResponse = function getResponse(type, length) {
+    if (arrValue.length === length && isSubmit) {
+      if (!isLuhnValid) {
+        response = {
+          success: false,
+          type: type,
+          message: 'Ошибка: Проверьте корректность данных'
+        };
+      } else {
+        response = {
+          success: true,
+          type: type
+        };
+      }
+    } else if (arrValue.length !== length && isSubmit) {
+      response = {
+        success: false,
+        type: type,
+        message: "\u041E\u0448\u0438\u0431\u043A\u0430: \u043E\u0436\u0438\u0434\u0430\u0435\u043C\u0430\u044F \u0434\u043B\u0438\u043D\u043D\u0430 ".concat(length, " \u0441\u0438\u043C\u0432\u043E\u043B\u043E\u0432")
+      };
+    } else {
+      response = type;
+    }
+  };
   if (arrValue[0] === 2) {
-    if (arrValue.length === 16 && isSubmit) {
-      if (!isLuhnValid) {
-        response = {
-          success: false,
-          type: 'mir',
-          message: 'Ошибка: Проверьте корректность данных'
-        };
-      } else {
-        response = {
-          success: true,
-          type: 'mir'
-        };
-      }
-    } else if (arrValue.length !== 16 && isSubmit) {
-      response = {
-        success: false,
-        type: 'mir',
-        message: 'Ошибка: ожидаемая длинна 16 символов'
-      };
-    } else {
-      response = 'mir';
-    }
+    getResponse(cardData.mir.type, cardData.mir.length);
   } else if (arrValue[0] === 4) {
-    if (arrValue.length === 16 && isSubmit) {
-      if (!isLuhnValid) {
-        response = {
-          success: false,
-          type: 'visa',
-          message: 'Ошибка: Проверьте корректность данных'
-        };
-      } else {
-        response = {
-          success: true,
-          type: 'visa'
-        };
-      }
-    } else if (arrValue.length !== 16 && isSubmit) {
-      response = {
-        success: false,
-        type: 'visa',
-        message: 'Ошибка: ожидаемая длинна 16 символов'
-      };
-    } else {
-      response = 'visa';
-    }
+    getResponse(cardData.visa.type, cardData.visa.length);
   } else if (arrValue[0] === 3) {
     if (arrValue[1] === 7 || arrValue[1] === 4) {
-      if (arrValue.length === 15 && isSubmit) {
-        if (!isLuhnValid) {
-          response = {
-            success: false,
-            type: 'amex',
-            message: 'Ошибка: Проверьте корректность данных'
-          };
-        } else {
-          response = {
-            success: true,
-            type: 'amex'
-          };
-        }
-      } else if (arrValue.length !== 15 && isSubmit) {
-        response = {
-          success: false,
-          type: 'amex',
-          message: 'Ошибка: ожидаемая длинна 15 символов'
-        };
-      } else {
-        response = 'amex';
-      }
+      getResponse(cardData.amex.type, cardData.amex.length);
     } else if (arrValue[1] === 0 && arrValue[2] >= 8 || arrValue[1] === 1 || arrValue[1] === 3 || arrValue[1] === 5) {
-      if (arrValue.length === 15 && isSubmit) {
-        if (!isLuhnValid) {
-          response = {
-            success: false,
-            type: 'jcb',
-            message: 'Ошибка: Проверьте корректность данных'
-          };
-        } else {
-          response = {
-            success: true,
-            type: 'jcb'
-          };
-        }
-      } else if (arrValue.length !== 16 && isSubmit) {
-        response = {
-          success: false,
-          type: 'jcb',
-          message: 'Ошибка: ожидаемая длинна 15 символов'
-        };
-      } else {
-        response = 'jcb';
-      }
+      getResponse(cardData.jcb.type, cardData.jcb.length);
     } else if (arrValue[1] === 0 || arrValue[1] === 6 || arrValue[1] === 8) {
-      if (arrValue.length === 15 && isSubmit) {
-        if (!isLuhnValid) {
-          response = {
-            success: false,
-            type: 'diners_club',
-            message: 'Ошибка: Проверьте корректность данных'
-          };
-        } else {
-          response = {
-            success: true,
-            type: 'diners_club'
-          };
-        }
-      } else if (arrValue.length !== 14 && isSubmit) {
-        response = {
-          success: false,
-          type: 'diners_club',
-          message: 'Ошибка: ожидаемая длинна 14 символов'
-        };
-      } else {
-        response = 'diners_club';
-      }
+      getResponse(cardData.diners_club.type, cardData.diners_club.length);
     }
   } else if (arrValue[0] === 5) {
-    if (arrValue.length === 16 && isSubmit) {
-      if (!isLuhnValid) {
-        response = {
-          success: false,
-          type: 'master',
-          message: 'Ошибка: Проверьте корректность данных'
-        };
-      } else {
-        response = {
-          success: true,
-          type: 'master'
-        };
-      }
-    } else if (arrValue.length !== 16 && isSubmit) {
-      response = {
-        success: false,
-        type: 'master',
-        message: 'Ошибка: ожидаемая длинна 16 символов'
-      };
-    } else {
-      response = 'master';
-    }
+    getResponse(cardData.master.type, cardData.master.length);
   } else if (value.match(/^6011/)) {
-    if (arrValue.length === 16 && isSubmit) {
-      if (!isLuhnValid) {
-        response = {
-          success: false,
-          type: 'discover',
-          message: 'Ошибка: Проверьте корректность данных'
-        };
-      } else {
-        response = {
-          success: true,
-          type: 'discover'
-        };
-      }
-    } else if (arrValue.length !== 16 && isSubmit) {
-      response = {
-        success: false,
-        type: 'discover',
-        message: 'Ошибка: ожидаемая длинна 16 символов'
-      };
-    } else {
-      response = 'discover';
-    }
+    getResponse(cardData.discover.type, cardData.discover.length);
   } else if (!response && arrValue.length >= 4 && isSubmit) {
     response = {
       success: false,
