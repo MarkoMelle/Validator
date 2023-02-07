@@ -61,7 +61,6 @@ export default class InnFormWidget {
     }
 
     const value = this.input.value;
-
     this.timeout = setTimeout(() => this.iconToggle(getCardType(value, false)), 300);
   }
 }
